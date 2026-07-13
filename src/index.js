@@ -2,21 +2,21 @@
 import dbConnect from './db/index.js';
 import mongoose from 'mongoose';
 import express from 'express';
-
+import { app } from './app.js';
 // dotenv.config({
 //     path: './.env'
-// })
+// }) resolved in the script in package.json nodemon -r dotenv/config index.js dotenv_config_path = './env'
 
-const app = express();
 dbConnect()
 .then(() => {
-    app.listen(process.env.PORT || 8000, () => {
-        console.log(`The server is listening on port ${process.env.PORT} or 8000`)
+    const PORT = Number(process.env.PORT);
+    const server = app.listen(Number(PORT) || 8000, () => {
+        console.log(` The server is listening on port ${PORT} or 8000`)
     })
 
-    app.on("error", (err) => {
+    server.on("error", (err) => {
         console.error("ERROR : ", err);
-        throw err;
+        // throw err;
     })
 })
 .catch((err) => {
