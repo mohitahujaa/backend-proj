@@ -6,6 +6,7 @@ const asyncHandler = (requestHandler) => {
     }
 }
 
+export default asyncHandler
 
 //try catch method
 // const asyncHandler = (requestHandler) => async (req, res, next) =>{

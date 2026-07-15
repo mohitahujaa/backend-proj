@@ -11,7 +11,7 @@ dbConnect()
 .then(() => {
     const PORT = Number(process.env.PORT);
     const server = app.listen(Number(PORT) || 8000, () => {
-        console.log(` The server is listening on port ${PORT} or 8000`)
+        console.log(` The server is listening on port ${PORT}`)
     })
 
     server.on("error", (err) => {
