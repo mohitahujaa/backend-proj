@@ -1,7 +1,7 @@
 const asyncHandler = (requestHandler) => {
     return (req, res, next) => {
         Promise.resolve(requestHandler(req, res, next))
-        .catch(next); //.catch automatically passes the err/reason as the first arg of callback
+            .catch(next); //.catch automatically passes the err/reason as the first arg of callback
         // or .catch((err) => next(err)) 
     }
 }
