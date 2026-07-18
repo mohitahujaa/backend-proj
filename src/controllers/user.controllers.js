@@ -3,12 +3,17 @@ import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { User } from '../models/user.models.js';
 import { uploadOnCloudinary } from '../utils/cloudinary.js';
+import jwt from "jsonwebtoken";
 
+const options = {
+    httpOnly: true,
+    secure: true
+}
 
 const generateAccessAndRefreshToken = async (user) => {
     try {
-        const accessToken = await user.generateAccessToken();
-        const refreshToken = await user.generateRefreshToken();
+        const accessToken = user.generateAccessToken();
+        const refreshToken = user.generateRefreshToken();
 
         user.refreshToken = refreshToken;
         await user.save({ validateBeforeSave: false });
@@ -132,12 +137,7 @@ const loginUser = asyncHandler(async (req, res) => {
     delete safeUser.refreshToken;
 
 
-    //step8 : preparing the cookie option
-    const options = {
-        httpOnly: true,
-        secure: true
-    }
-
+    //step8 : preparing the cookie option -- at line 8 (options)
 
     //step9 : sending response to client
     return res
@@ -177,11 +177,6 @@ const logoutUser = asyncHandler(async (req, res) => {
             new: true
         }
     );
-
-    const options = {
-        httpOnly: true,
-        secure: true
-    }
     
     res.status(200)
     .clearCookie("accessToken", options)
@@ -191,4 +186,37 @@ const logoutUser = asyncHandler(async (req, res) => {
 
 })
 
-export { registerUser, loginUser, logoutUser }
+const refreshAccessToken = asyncHandler(async (req, res) => {
+    //step 1: get refresh Token and validate
+    const incomingRefeshToken = req.cookies?.refreshToken || req.body.refreshToken;
+
+    if(!incomingRefeshToken) throw new ApiError(401, "Unauthorized request");
+
+
+    //step 2: verify the refresh token
+    var decodedToken;
+    try {
+        decodedToken = jwt.verify(incomingRefeshToken, process.env.REFRESH_TOKEN_SECRET)
+    } catch (error) {
+        throw new ApiError(401, "Unauthorized request");
+    }
+
+    //step 3 : match the refresh token if it is the same as in db, (a user can send older refresh token intentionally) -- important
+    const user = await User.findById(decodedToken._id)
+    if(!user) throw new ApiError(401, "Unauthorised request");
+
+    if(user.refreshToken !== incomingRefeshToken) throw new ApiError(401, "Refresh Token is expired or used");
+
+    //step 4 : generate new access and refresh token and send response
+    const {refreshToken, accessToken } = await generateAccessAndRefreshToken(user);
+
+    res.status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json( new ApiResponse(200, "Access Token refreshed", {
+        refreshToken,
+        accessToken
+    }))
+})
+
+export { registerUser, loginUser, logoutUser, refreshAccessToken }
