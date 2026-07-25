@@ -26,12 +26,24 @@ const userSchema = new Schema(
             index: true
         },
         avatar: {
-            type: String, //cloudinary url
-            required: true
+            url: { 
+                type: String,
+                required : true,
+            },
+            public_id : {
+                type: String,
+                required: true
+            }
         },
         coverImage: {
-            type: String, //cloudinary url
-            // required: true
+            url: {
+                type: String,
+                // required: true
+            },
+            public_id : {
+                type: String,
+                // required: true
+            }
         },
         watchHistory: [
             {
@@ -42,6 +54,16 @@ const userSchema = new Schema(
         password: {
             type: String,
             required: [true, "Password is required"]
+        },
+        subscribersCount: {
+            type: Number,
+            required: true,
+            default: 0
+        },
+        toSubscribedCount: {
+            type: Number,
+            required: true,
+            default: 0
         },
         refreshToken: {
             type: String
