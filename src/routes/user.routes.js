@@ -42,7 +42,6 @@ router.route('/update-cover').patch(verifyJWT, upload.single('coverImage'), upda
 router.route('/history').get(verifyJWT, getWatchHistory);
 router.route('/:username').get(verifyJWT, getPublicChannelPage);
 
-
 router.route('/refresh-token').post(refreshAccessToken);
 
 export default router;

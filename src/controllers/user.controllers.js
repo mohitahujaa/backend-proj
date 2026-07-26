@@ -102,7 +102,6 @@ const registerUser = asyncHandler(async (req, res) => {
         .json(new ApiResponse(201, "Registered succesfully", createdUser));
 })
 
-
 const loginUser = asyncHandler(async (req, res) => {
     //take email, password from the frontend (postman)
     //check if email,password are not empty
