@@ -40,14 +40,17 @@ const uploadOnCloudinary = async (localFilePath,
 
 }
 
-const deleteCloudinaryFile = async (publicId, retries = 3) => {
+const deleteCloudinaryFile = async (publicId,{
+    resType = "image",
+    retries = 3,
+} = {}) => {
     try {
         if (!publicId) throw (404, "Image not selected for deletion");
 
         
         for(let i = 0; i < retries; i++){
             try {
-                const response = await cloudinary.api.delete_resources([publicId]);
+                const response = await cloudinary.api.delete_resources([publicId], { resource_type : resType});
                 if(response) return response;
             } catch (error) {
                 console.log(error);

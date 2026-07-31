@@ -5,7 +5,8 @@ import { upload } from '../middlewares/multer.middlewares.js';
 
 
 
-import { uploadVideo } from '../controllers/video.controller.js';
+import { uploadVideo, deleteVideo } from '../controllers/video.controller.js';
 router.route("/upload").post(verifyJWT, upload.single('video'), uploadVideo)
+router.route("/delete").post(verifyJWT, deleteVideo)
 
 export default router;
