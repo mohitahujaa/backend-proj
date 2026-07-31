@@ -2,9 +2,9 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { User } from '../models/user.models.js';
+import { Subscription } from '../models/subscription.models.js';
 import { uploadOnCloudinary, deleteCloudinaryFile } from '../utils/cloudinary.js';
 import jwt from "jsonwebtoken";
-import { Subscription } from '../models/subscription.models.js';
 import mongoose from 'mongoose';
 
 const options = {
