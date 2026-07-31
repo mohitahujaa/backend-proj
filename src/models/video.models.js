@@ -44,6 +44,14 @@ const videoSchema = new Schema(
                 required: true
             }
         },
+        bytes: {
+            type: Number,
+            required: true
+        },
+        format: {
+            type: String,
+            required: true
+        },
         views: {
             type: Number,
             default: 0

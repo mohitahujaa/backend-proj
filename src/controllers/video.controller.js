@@ -28,7 +28,8 @@ const uploadVideo = asyncHandler( async (req, res) => {
            title,
            description,
            duration: response.duration,
-           size: response.bytes,
+           bytes: response.bytes,
+           format: response.format,
            resolution: {
             width: response.width,
             height: response.height
