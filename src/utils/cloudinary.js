@@ -9,13 +9,19 @@ cloudinary.config({
 });
 
 // Upload a file
-const uploadOnCloudinary = async (localFilePath) => {
+const uploadOnCloudinary = async (localFilePath,
+        {
+            resType = "auto",
+            folder
+        } = {}
+) => {
 
     try {
         if (!localFilePath) return null
 
         const response = await cloudinary.uploader.upload(localFilePath, {
-            resource_type: "auto",
+            resource_type: resType || "auto",
+            folder: folder || "Home"
         })
 
         console.log("File has been uploaded on cloudinary successfully", response.url)
@@ -34,15 +40,23 @@ const uploadOnCloudinary = async (localFilePath) => {
 
 }
 
-const deleteCloudinaryFile = async (publicId) => {
+const deleteCloudinaryFile = async (publicId, retries = 3) => {
     try {
         if (!publicId) throw (404, "Image not selected for deletion");
 
-        const response = await cloudinary.api.delete_resources([publicId]);
-        if (!response) throw (500, "Something went wrong while deleting the file");
+        
+        for(let i = 0; i < retries; i++){
+            try {
+                const response = await cloudinary.api.delete_resources([publicId]);
+                if(response) return response;
+            } catch (error) {
+                console.log(error);
+            }
 
-        console.log("File has been deleted from cloudinary");
-        return response;
+            await new Promise(resolve => setTimeout(resolve, 1000 * (2**i)));
+        }
+
+        return false;
 
     } catch (error) {
         console.log("Cloudinary deletion failed", error.message);
@@ -50,19 +64,19 @@ const deleteCloudinaryFile = async (publicId) => {
     }
 }
 
-const deleteWithRetry = async (publicId, retries = 3) => {
-    for (i = 0; i < retries; i++) {
-        try {
-            const deleted = await deleteCloudinaryFile(publicId);
-            if (deleted) return true
-        } catch (error) {
-            console.log(error)
-        }
+// const deleteWithRetry = async (publicId, retries = 3) => {
+//     for (let i = 0; i < retries; i++) {
+//         try {
+//             const deleted = await deleteCloudinaryFile(publicId);
+//             if (deleted) return true
+//         } catch (error) {
+//             console.log(error)
+//         }
 
-        await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** i)));
-    }
+//         await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** i)));
+//     }
 
-    return false
-}
+//     return false
+// }
 
-export { uploadOnCloudinary, deleteWithRetry }
+export { uploadOnCloudinary, deleteCloudinaryFile }

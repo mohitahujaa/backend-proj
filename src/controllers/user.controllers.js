@@ -2,7 +2,7 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { User } from '../models/user.models.js';
-import { uploadOnCloudinary, deleteWithRetry } from '../utils/cloudinary.js';
+import { uploadOnCloudinary, deleteCloudinaryFile } from '../utils/cloudinary.js';
 import jwt from "jsonwebtoken";
 import { Subscription } from '../models/subscription.models.js';
 import mongoose from 'mongoose';
@@ -71,8 +71,8 @@ const registerUser = asyncHandler(async (req, res) => {
     if (!avatarLocalPath) throw new ApiError(400, "Avatar is required");
 
     //step 6 : uploading on cloudinary
-    const avatar = await uploadOnCloudinary(avatarLocalPath);
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+    const avatar = await uploadOnCloudinary(avatarLocalPath, {resType : "image", folder : "avatars"});
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath, {resType : "image", folder : "coverImages"});
 
     if (!avatar) {
         throw new ApiError(400, "Avatar is required");
@@ -292,7 +292,7 @@ const updateAvatarImage = asyncHandler(async (req, res) => {
     if (!AvatarImageLocalPath) throw new ApiError(404, "Avatar file is required");
 
     //upload it on cloudinary
-    const avatar = await uploadOnCloudinary(AvatarImageLocalPath);
+    const avatar = await uploadOnCloudinary(AvatarImageLocalPath, {resType : "image", folder : "avatars"});
     // console.log(avatar);
 
     if (!avatar?.url) throw new ApiError(500, "Something went wrong while updating Avatar");
@@ -317,7 +317,7 @@ const updateAvatarImage = asyncHandler(async (req, res) => {
 
     //delete the previously uploaded file
     const response = await deleteCloudinaryFile(req.user?.avatar.public_id);
-    // console.log(response);
+    console.log(response);
 
     if (!response) throw new ApiError(500, "Deletion of previous cloudinary file failed");
 
@@ -332,7 +332,7 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     if (!coverImageLocalPath) throw new ApiError(404, "Cover Image is required");
 
     //upload cover image on coudinary
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath, {resType : "image", folder : "coverImages"});
     if (!coverImage.url) throw new ApiError(500, "Something went wrong while updating Cover Image");
 
     const user = await User.findByIdAndUpdate(req.user?._id,
@@ -563,9 +563,9 @@ const deleteAccount = asyncHandler(async (req, res) => {
 
         await session.commitTransaction();
 
-        await deleteWithRetry(user.avatar.public_id);
+        await deleteCloudinaryFile(user.avatar.public_id);
         if(user.coverImage?.public_id){
-            await deleteWithRetry(user.coverImage.public_id)
+            await deleteCloudinaryFile(user.coverImage.public_id)
         }
 
         return res
