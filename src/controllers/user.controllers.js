@@ -2,8 +2,10 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { User } from '../models/user.models.js';
-import { uploadOnCloudinary, deleteCloudinaryFile } from '../utils/cloudinary.js';
+import { uploadOnCloudinary, deleteWithRetry } from '../utils/cloudinary.js';
 import jwt from "jsonwebtoken";
+import { Subscription } from '../models/subscription.models.js';
+import mongoose from 'mongoose';
 
 const options = {
     httpOnly: true,
@@ -59,18 +61,18 @@ const registerUser = asyncHandler(async (req, res) => {
     })
 
     if (existingUser) {
-        throw new ApiError(409, "User already exists");
+        throw new ApiError(409, "Username or email already in use");
     }
 
     //step 5 : checking if the localfilepath exists 
     const avatarLocalPath = req.files?.avatar?.[0]?.path;
     const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
-    
+
     if (!avatarLocalPath) throw new ApiError(400, "Avatar is required");
 
     //step 6 : uploading on cloudinary
     const avatar = await uploadOnCloudinary(avatarLocalPath);
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath);    
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
     if (!avatar) {
         throw new ApiError(400, "Avatar is required");
@@ -95,7 +97,7 @@ const registerUser = asyncHandler(async (req, res) => {
     //step 8 : preparing the response for user
     const createdUser = await User.findById(user._id).select("-password -refreshToken");
     if (!createdUser) throw new ApiError(500, "Something went wrong while registering the user");
-    
+
     //step 9 : send user apt response
     return res
         .status(201)
@@ -292,10 +294,10 @@ const updateAvatarImage = asyncHandler(async (req, res) => {
     //upload it on cloudinary
     const avatar = await uploadOnCloudinary(AvatarImageLocalPath);
     // console.log(avatar);
-    
+
     if (!avatar?.url) throw new ApiError(500, "Something went wrong while updating Avatar");
 
-    const user = await User.findByIdAndUpdate(req.user?._id, 
+    const user = await User.findByIdAndUpdate(req.user?._id,
         {
             $set: {
                 avatar: {
@@ -316,8 +318,8 @@ const updateAvatarImage = asyncHandler(async (req, res) => {
     //delete the previously uploaded file
     const response = await deleteCloudinaryFile(req.user?.avatar.public_id);
     // console.log(response);
-    
-    if(!response) throw new ApiError(500, "Deletion of previous cloudinary file failed");
+
+    if (!response) throw new ApiError(500, "Deletion of previous cloudinary file failed");
 
 
     return res
@@ -333,7 +335,7 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     const coverImage = await uploadOnCloudinary(coverImageLocalPath);
     if (!coverImage.url) throw new ApiError(500, "Something went wrong while updating Cover Image");
 
-    const user = await User.findByIdAndUpdate(req.user?._id, 
+    const user = await User.findByIdAndUpdate(req.user?._id,
         {
             $set: {
                 coverImage: {
@@ -349,21 +351,23 @@ const updateCoverImage = asyncHandler(async (req, res) => {
 
     //delete the previous image 
     const coverImageExists = req.user?.coverImage?.public_id;
-    if(coverImageExists){
+    if (coverImageExists) {
         const response = deleteCloudinaryFile(req.user?.coverImage?.public_id)
-        if(!response) throw new ApiError(500, "The deletion request failed");
+        if (!response) throw new ApiError(500, "The deletion request failed");
     }
-    
+
     return res
         .status(200)
         .json(new ApiResponse(200, "Cover Image updated successfully", user));
 })
 
 const getPublicChannelPage = asyncHandler(async (req, res) => {
-    
-    const { username } = req.params;
-    if(!username?.trim()) throw new ApiError(404, "No user specified");
 
+    const { username } = req.params;
+    if (!username?.trim()) throw new ApiError(404, "No user specified");
+
+    const channel = await User.findOne({username}).select("-password -refreshToken -email");
+    if(!channel) throw new ApiError(404, "Channel does not exist");
     // const channel = await User.aggregate([
     //     {
     //         $match: {
@@ -423,15 +427,15 @@ const getPublicChannelPage = asyncHandler(async (req, res) => {
     // .json( new ApiResponse(200, "Channel fetched successfully", channel[0]));
 
     return res
-    .status(200)
-    .json( new ApiResponse(200, "Channel fetched successfully", ))
+        .status(200)
+        .json(new ApiResponse(200, "Channel fetched successfully", channel))
 })
 
 const getWatchHistory = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
     console.log(userId);
-    
-    if(!userId) throw new ApiError(400, "Please login again to continue with your request");
+
+    if (!userId) throw new ApiError(400, "Please login again to continue with your request");
 
     const user = await User.aggregate([
         {
@@ -477,12 +481,103 @@ const getWatchHistory = asyncHandler(async (req, res) => {
 
     console.log(user[0].watchHistory);
     console.log(Array.isArray(user[0].watchHistory));
-    
-    if(!user?.[0]?.watchHistory?.length) throw new ApiError(404, "No watch history found");
+
+    if (!user?.[0]?.watchHistory?.length) throw new ApiError(404, "No watch history found");
 
     return res
-    .status(200)
-    .json( new ApiResponse(200, "Watch History fetched successfully", user[0].watchHistory))
+        .status(200)
+        .json(new ApiResponse(200, "Watch History fetched successfully", user[0].watchHistory))
+
+})
+
+const deleteAccount = asyncHandler(async (req, res) => {
+    //verify password
+    //decrement subscriber count
+    //delete cloudinary files
+    //delete user document from all the collections
+    //delete cookies
+
+    const { password } = req.body;
+    if (!password.trim()) throw new ApiError(400, "Password is required");
+
+    const user = await User.findById(req.user._id)
+    if (!user) throw new ApiError(404, "No account exists");
+
+    const isPasswordCorrect = await user.isPasswordCorrect(password);
+    if (!isPasswordCorrect) throw new ApiError(400, "Incorrect password");
+
+    const session = await mongoose.startSession();
+
+    try {
+        session.startTransaction();
+
+        //first lets decrement the subscriber count of the channel to whom user has subscribed
+        const Tosubscribed = await Subscription.find({ subscriber: req.user._id }).select('channel').session(session);
+
+        const TosubscribedOps = Tosubscribed.map(sub => ({
+            updateOne: {
+                filter: {
+                    _id: sub.channel
+                },
+                update: {
+                    $inc: {
+                        subscribersCount: -1
+                    }
+                }
+            }
+        }))
+
+        await User.bulkWrite(TosubscribedOps, { session });
+
+        const mySubscribers = await Subscription.find({ channel: req.user._id }).select('subscriber');
+
+        const mySubscribersOps = mySubscribers.map(sub => ({
+            updateOne: {
+                filter: {
+                    _id: sub.subscriber
+                },
+                update: {
+                    $inc: {
+                        Tosubscribed: -1
+                    }
+                }
+            }
+        }))
+
+        await User.bulkWrite(mySubscribersOps, { session });
+
+        console.log("Channels updated successfully");
+
+        await Subscription.deleteMany(
+            {
+                $or: [
+                    { subscriber: req.user._id },
+                    { channel: req.user._id }
+                ]
+            },
+            { session }
+        )
+
+        const isUserDeleted = await User.findByIdAndDelete(user._id)
+        if (!isUserDeleted) throw new ApiError(500, "Some error occured while deleting the account");
+
+        await session.commitTransaction();
+
+        await deleteWithRetry(user.avatar.public_id);
+        if(user.coverImage?.public_id){
+            await deleteWithRetry(user.coverImage.public_id)
+        }
+
+        return res
+            .status(200)
+            .json(new ApiResponse(200, "Account deletion Successful"));
+
+    } catch (error) {
+        await session.abortTransaction();
+        throw new ApiError(500, error.message || "The deletion process cant be completed");
+    } finally {
+        await session.endSession();
+    }
 
 })
 
@@ -497,5 +592,6 @@ export {
     updateAvatarImage,
     updateCoverImage,
     getPublicChannelPage,
-    getWatchHistory
+    getWatchHistory,
+    deleteAccount
 }
