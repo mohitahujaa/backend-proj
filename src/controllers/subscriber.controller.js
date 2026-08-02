@@ -47,7 +47,7 @@ const toggleSubscribe = asyncHandler( async (req, res) => {
         
                 const incrementSubscriberCount = await User.findByIdAndUpdate(
                     channel._id,
-                    { $inc: { subscribersCount: 1}},
+                    { $inc: { subscribersCount: 1} },
                     { session }
                 )
         

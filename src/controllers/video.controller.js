@@ -3,6 +3,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { deleteCloudinaryFile, uploadOnCloudinary } from "../utils/cloudinary.js";
 import { Video } from "../models/video.models.js";
+import mongoose from "mongoose";
 
 const uploadVideo = asyncHandler( async (req, res) => {
     const { title, description } = req.body;
@@ -76,4 +77,29 @@ const deleteVideo = asyncHandler(async (req, res) => {
     .json( new ApiResponse(200, "Video deleted successfully"));
 })
 
-export { uploadVideo, deleteVideo }
+const watchVideo = asyncHandler(async (req, res) => {
+    const { videoId } = req.params
+    if(!videoId) throw new ApiError(404, "Invalid video id");
+
+    const videoMetadata = await Video.findById(videoId)
+    .select("-videoFile.public_id")
+    .populate({
+        path: "owner",
+        select: "username fullName subscribersCount avatar.url"
+    })
+    if(!videoMetadata) throw new ApiError(404, "No such video exists");
+    console.log(videoMetadata);
+
+    return res
+    .status(200)
+    .json(new ApiResponse(200, "Video fetched successfully", videoMetadata))
+
+
+
+    // increase the views once clicked
+    // add it to user watchhistory
+    // like the video
+    // comment on the video
+})
+
+export { uploadVideo, deleteVideo, watchVideo }

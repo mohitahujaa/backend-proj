@@ -67,19 +67,4 @@ const deleteCloudinaryFile = async (publicId,{
     }
 }
 
-// const deleteWithRetry = async (publicId, retries = 3) => {
-//     for (let i = 0; i < retries; i++) {
-//         try {
-//             const deleted = await deleteCloudinaryFile(publicId);
-//             if (deleted) return true
-//         } catch (error) {
-//             console.log(error)
-//         }
-
-//         await new Promise(resolve => setTimeout(resolve, 1000 * (2 ** i)));
-//     }
-
-//     return false
-// }
-
 export { uploadOnCloudinary, deleteCloudinaryFile }
