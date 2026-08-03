@@ -24,12 +24,12 @@ app.use(cookieParser());
 
 // router import
 import userRouter from './routes/user.routes.js';
-import subscriberRouter from './routes/subscribe.route.js';
+import channelRouter from './routes/channel.route.js';
 import videoRouter from './routes/video.route.js';
 import commentRouter from './routes/comment.route.js';
 
 app.use("/api/v1/user", userRouter);
-app.use("/api/v1/subscribe", subscriberRouter);
+app.use("/api/v1/channel", channelRouter);
 app.use("/api/v1/video", videoRouter);
 app.use("/api/v1/comment", commentRouter)
 

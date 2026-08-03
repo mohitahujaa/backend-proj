@@ -44,7 +44,7 @@ router.route('/update-avatar').patch(verifyJWT, upload.single('avatar'), updateA
 router.route('/update-cover').patch(verifyJWT, upload.single('coverImage'), updateCoverImage);
 router.route('/history').get(verifyJWT, getWatchHistory);
 router.route('/:username').get(verifyJWT, getPublicChannelPage);
-router.route('/delete-account').post(verifyJWT, upload.none(), deleteAccount);
+router.route('/delete-account').delete(verifyJWT, upload.none(), deleteAccount);
 
 router.route('/me/subscriptions').get(verifyJWT, getSubscribedChannels)
 router.route('/me/liked-videos').get(verifyJWT, getLikedVideos)

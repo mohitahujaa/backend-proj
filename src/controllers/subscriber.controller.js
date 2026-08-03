@@ -15,7 +15,7 @@ const toggleSubscribe = asyncHandler( async (req, res) => {
     //                    -inc/dec count of toSubscribed
     //commit the transaction
 
-        const channelUsername = req.params?.channel;
+        const channelUsername = req.params?.channelUsername;
         if(!channelUsername) throw new ApiError(400, "Channel name is missing");
 
         const channel = await User.findOne({ username: channelUsername }, { _id: 1}).lean();
@@ -111,6 +111,60 @@ const toggleSubscribe = asyncHandler( async (req, res) => {
     }
 )
 
+const getSubscribedChannels = asyncHandler( async (req, res) => {
+    const userId = req.user?._id;
+
+    const subscribedChannels = await Subscription.aggregate([
+        {
+            $match: {
+                subscriber: new mongoose.Types.ObjectId(userId)
+            }
+        },
+        {
+            $sort: {
+                createdAt: -1,
+            }
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "channel",
+                foreignField: "_id",
+                as: "channel",
+                pipeline: [
+                    {
+                        $project: {
+                            username: 1,
+                            "avatar.url": 1,
+                            fullName: 1,
+                            subscribersCount: 1
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $unwind: "$channel"
+        },
+        {
+            $addFields: {
+                "channel.subscibedAt": "$createdAt"
+            }
+        },
+        {
+            $replaceRoot: {
+                newRoot: "$channel"
+            }
+        }
+    ])
+
+    return res
+    .status(200)
+    .json( new ApiResponse(200, "Subscriptions fetched successfully", subscribedChannels));
+    
+})
+
 export {
-    toggleSubscribe
+    toggleSubscribe,
+    getSubscribedChannels
 }
