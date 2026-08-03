@@ -15,6 +15,8 @@ import {
 } from "../controllers/user.controllers.js";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
 import { upload } from "../middlewares/multer.middlewares.js";
+import { getSubscribedChannels } from "../controllers/subscriber.controller.js";
+import { getLikedVideos } from "../controllers/like.controller.js";
 
 const router = Router();
 
@@ -44,6 +46,7 @@ router.route('/history').get(verifyJWT, getWatchHistory);
 router.route('/:username').get(verifyJWT, getPublicChannelPage);
 router.route('/delete-account').post(verifyJWT, upload.none(), deleteAccount);
 
-router.route('/refresh-token').post(refreshAccessToken);
+router.route('/me/subscriptions').get(verifyJWT, getSubscribedChannels)
+router.route('/me/liked-videos').get(verifyJWT, getLikedVideos)
 
 export default router;
