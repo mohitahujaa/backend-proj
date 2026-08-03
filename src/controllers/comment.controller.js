@@ -118,4 +118,62 @@ const deleteComment = asyncHandler(async (req, res) => {
 
 });
 
-export { doComment, deleteComment };
+const getVideoComments = asyncHandler(async (req, res) => {
+
+    const { videoId } = req.params;
+    if(!videoId) throw new ApiError(404, "Invalid video url");
+    if(!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(404, "Invalid video url");
+
+    //check if video exists
+    const videoExists = Video.findById(videoId).select("_id").lean();
+    if(!videoExists) return new ApiError(404, "Video not found");
+
+    const comments = await Comment.aggregate([
+        {
+            $match: {
+                targetId: new mongoose.Types.ObjectId(videoId),
+                targetType: "Video"
+            }
+        },
+        {
+            $sort: {
+                createdAt: -1, //newest at the top
+            }
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "author",
+                foreignField: "_id",
+                as: "author",
+                pipeline: [
+                    {
+                        $project: {
+                            username: 1,
+                            "avatar.url": 1
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $unwind: "$author"
+        },
+        {
+            $project: {
+                _id: 1,
+                text: 1,
+                author: 1,
+                createdAt: 1,
+                updatedAt: 1
+            }
+        }
+    ])
+
+    return res
+    .status(200)
+    .json( new ApiResponse(200, "Comments fetched successfully", comments))
+    
+})
+
+export { doComment, deleteComment, getVideoComments };
