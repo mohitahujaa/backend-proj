@@ -110,4 +110,88 @@ const toggleVideoLike = asyncHandler(async (req, res) => {
     
 })
 
-export { toggleVideoLike }
+const getLikedVideos = asyncHandler(async (req, res) => {
+    const userId = req.user?._id;
+
+    // const likedVidoes = await Like.find({likedBy: userId, targetType: "Video"}).populate({
+    //     path: "targetId",
+    //     select: "title thumbnail owner views likes coments duration videoFile.mp4",
+    //     populate: {
+    //         path: "owner",
+    //         select: "username avatar.url createdAt"
+    //     }
+    // });
+
+    const likedVidoes = await Like.aggregate([
+        {
+            $match: {
+                likedBy: new mongoose.Types.ObjectId(userId),
+                targetType: "Video"
+            }
+        },
+        {
+            $sort: {
+                updatedAt: -1,
+            }
+        },
+        {
+            $lookup: {
+                from: "videos",
+                localField: "targetId",
+                foreignField: "_id",
+                as: "video",
+                pipeline: [{
+                    $project: {
+                        title: 1,
+                        thumbnail: 1,
+                        owner: 1,
+                        "videoFile.mp4": 1,
+                        duration: 1,
+                        views: 1,
+                        likes: 1,
+                        comments: 1,
+                    }
+                },
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "owner",
+                        foreignField: "_id",
+                        as: "owner",
+                        pipeline: [
+                            {
+                                $project: {
+                                    username: 1,
+                                    "avatar.url" : 1,
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                $unwind: "$owner"
+                }
+            ]
+            }
+        },
+        {
+            $unwind: "$video"
+        },
+        {
+            $addFields: {
+                "video.likedAt": "$updatedAt"
+            }
+        },
+        {
+            $replaceRoot: {
+                newRoot: "$video"
+            }
+        }
+    ])
+
+    return res
+    .status(200)
+    .json( new ApiResponse(200, "Vidoees fetched successfully", likedVidoes));
+})
+
+export { toggleVideoLike, getLikedVideos }

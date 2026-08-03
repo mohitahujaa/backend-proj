@@ -6,7 +6,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 import mongoose from 'mongoose';
 
 
-const doComment = asyncHandler( async (req, res) => {
+const doComment = asyncHandler(async (req, res) => {
 
     const session = await mongoose.startSession();
     try {
@@ -14,77 +14,76 @@ const doComment = asyncHandler( async (req, res) => {
 
         const { text } = req.body;
         const { videoId } = req.params;
-    
-        if(!text?.trim()) throw new ApiError(400, "No text provided for the comment");
-        if(!videoId) throw new ApiError(400, "Invalid video url");
 
-        if(!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, "Invalid video url")
-    
-        if(text.length > 10000) throw new ApiError(400, "A comment can only be upto ten thousand characters");
+        if (!text?.trim()) throw new ApiError(400, "No text provided for the comment");
+        if (!videoId) throw new ApiError(400, "Invalid video url");
+
+        if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(400, "Invalid video url")
+
+        if (text.length > 10000) throw new ApiError(400, "A comment can only be upto ten thousand characters");
 
         const [addedComment] = await Comment.create([{
-                text,
-                targetId: videoId,
-                targetType: "Video",
-                author: req.user._id
-            }],
+            text,
+            targetId: videoId,
+            targetType: "Video",
+            author: req.user._id
+        }],
             {
                 session
             }
         )
-        if(!addedComment) throw new ApiError(500, "Unable to add the comment at the moment");
+        if (!addedComment) throw new ApiError(500, "Unable to add the comment at the moment");
 
         const incVidCommentCnt = await Video.findByIdAndUpdate(videoId, {
-                $inc: {
-                    comments: 1
-                }
-            },
+            $inc: {
+                comments: 1
+            }
+        },
             {
                 new: true,
                 session
             }
         );
-        if(!incVidCommentCnt) throw new ApiError(500, "Unable to add the comment at the moment");
+        if (!incVidCommentCnt) throw new ApiError(500, "Unable to add the comment at the moment");
 
         const commentCnt = incVidCommentCnt.comments;
 
         await session.commitTransaction();
         return res
-        .status(200)
-        .json( new ApiResponse(200, "Comment added to the video", {addedComment, commentCnt}));
+            .status(200)
+            .json(new ApiResponse(200, "Comment added to the video", { addedComment, commentCnt }));
 
     } catch (error) {
         await session.abortTransaction();
         throw new ApiError(500, error.message || "Unable to add the comment at the moment");
 
-    } finally{
+    } finally {
         await session.endSession();
     }
 })
 
-
-const deleteComment = asyncHandler( async (req, res) => {
+const deleteComment = asyncHandler(async (req, res) => {
 
     const session = await mongoose.startSession();
 
-try {
+    try {
         await session.startTransaction();
 
-        const {commentId} = req.params
-        if(!commentId?.trim()) throw new ApiError(404, "Comment does not exist");
-    
-        if(!mongoose.Types.ObjectId.isValid(commentId)) throw new ApiError(404, "Comment does not exist");
-    
+        const { commentId } = req.params
+        if (!commentId?.trim()) throw new ApiError(404, "Comment does not exist");
+
+        if (!mongoose.Types.ObjectId.isValid(commentId)) throw new ApiError(404, "Comment does not exist");
+
         //check if the comment exists 
         const comment = await Comment.findById(commentId).select("author targetId targetType").session(session).lean();
-        if(!comment) throw new ApiError(404, "Comment does not exist");
-    
+        if (!comment) throw new ApiError(404, "Comment does not exist");
+
         //verify the owner
         const isOwner = comment.author.equals(req.user?._id);
-        if(!isOwner) throw new ApiError(403, "You are not authorised to perform this action");
-    
+        if (!isOwner) throw new ApiError(403, "You are not authorised to perform this action");
+
         const videoId = comment.targetId;
-        const decVideoCommentCnt = await Video.findByIdAndUpdate(videoId, 
+        const decVideoCommentCnt = await Video.findByIdAndUpdate(videoId,
             {
                 $inc: {
                     comments: -1
@@ -95,30 +94,28 @@ try {
                 session
             }
         )
-        if(!decVideoCommentCnt) throw new ApiError(500, "Something went wrong while deleting this comment");
-    
-        const isDeleted = await Comment.findByIdAndDelete(commentId, {session});
-        if(!isDeleted) throw new ApiError(500, "Something went wrong while deleting this comment");
-    
+        if (!decVideoCommentCnt) throw new ApiError(500, "Something went wrong while deleting this comment");
+
+        const isDeleted = await Comment.findByIdAndDelete(commentId, { session });
+        if (!isDeleted) throw new ApiError(500, "Something went wrong while deleting this comment");
+
         await session.commitTransaction();
-    
+
         return res
-        .status(200)
-        .json( new ApiResponse(200, "Comment deleted", {
-            success: true,
-            comments: decVideoCommentCnt.comments,
-        }));
-    
+            .status(200)
+            .json(new ApiResponse(200, "Comment deleted", {
+                success: true,
+                comments: decVideoCommentCnt.comments,
+            }));
+
     } catch (error) {
-    await session.abortTransaction();
-    throw new ApiError(error.statusCode || 500, error.message || "Something went wrong while deleting the comment");
-    
-    } finally{
+        await session.abortTransaction();
+        throw new ApiError(error.statusCode || 500, error.message || "Something went wrong while deleting the comment");
+
+    } finally {
         await session.endSession();
     }
 
 });
-
-
 
 export { doComment, deleteComment };
