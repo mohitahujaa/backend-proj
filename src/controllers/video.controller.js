@@ -3,7 +3,6 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { deleteCloudinaryFile, uploadOnCloudinary } from "../utils/cloudinary.js";
 import { Video } from "../models/video.models.js";
-import mongoose from "mongoose";
 
 const uploadVideo = asyncHandler( async (req, res) => {
     const { title, description } = req.body;
@@ -52,7 +51,7 @@ const uploadVideo = asyncHandler( async (req, res) => {
 
 const deleteVideo = asyncHandler(async (req, res) => {
     
-    const { videoId } = req.body;
+    const { videoId } = req.params;
     if(!videoId) throw new ApiError(404, "video not selected");
 
     const video = await Video.findById(videoId);
