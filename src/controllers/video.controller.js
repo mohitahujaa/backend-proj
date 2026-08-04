@@ -3,6 +3,8 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { deleteCloudinaryFile, uploadOnCloudinary } from "../utils/cloudinary.js";
 import { Video } from "../models/video.models.js";
+import { User } from "../models/user.models.js";
+import mongoose from "mongoose";
 
 const uploadVideo = asyncHandler( async (req, res) => {
     const { title, description } = req.body;
@@ -101,4 +103,47 @@ const watchVideo = asyncHandler(async (req, res) => {
     // comment on the video
 })
 
-export { uploadVideo, deleteVideo, watchVideo }
+const getChannelVideos = asyncHandler(async (req, res) => {
+    const { channelUsername } = req.params;
+    if(!channelUsername) throw new ApiError(404, "Enter valid channel name");
+
+    //check if channel exists (username is correct)
+    const channelObj = await User.findOne({username: channelUsername}).select("_id").lean();
+    if(!channelObj) throw new ApiError(404, "Enter a valid channel name");
+    console.log(channelObj);
+    
+    const videos = await Video.aggregate([
+        {
+            $match: {
+                owner: new mongoose.Types.ObjectId(channelObj._id)
+            }
+        },
+        {
+            $sort: {
+                createdAt: -1,
+            }
+        },
+        {
+            $project: {
+                _id: 1,
+                title: 1,
+                duration: 1,
+                thumbnail: 1,
+                format: 1,
+                views: 1,
+                likes: 1,
+                comments: 1,
+                createdAt: 1,
+                "videoFile.mp4" : 1,
+                "videoFile.hls" : 1,
+            }
+        }
+    ])
+
+    console.log(videos);
+    return res
+    .status(200)
+    .json(new ApiResponse(200, "Videos fetched Successfully", videos));
+})
+
+export { uploadVideo, deleteVideo, watchVideo, getChannelVideos }
