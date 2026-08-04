@@ -433,22 +433,28 @@ const getPublicChannelPage = asyncHandler(async (req, res) => {
 
 const getWatchHistory = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
-    console.log(userId);
-
     if (!userId) throw new ApiError(400, "Please login again to continue with your request");
 
-    const user = await User.aggregate([
+    const watchHistory = await User.aggregate([
         {
             $match: {
                 _id: userId
             }
         },
         {
+            $unwind: "$watchHistory"
+        },
+        {
+            $sort: {
+                "watchHistory.watchedAt": -1,
+            }
+        },
+        {
             $lookup: {
                 from: "videos",
-                as: "watchHistory",
-                localField: "watchHistory",
+                localField: "watchHistory.video",
                 foreignField: "_id",
+                as: "video",
                 pipeline: [
                     {
                         $lookup: {
@@ -460,7 +466,7 @@ const getWatchHistory = asyncHandler(async (req, res) => {
                                 {
                                     $project: {
                                         fullName: 1,
-                                        avatar: 1,
+                                        "avatar.url": 1,
                                         username: 1
                                     }
                                 }
@@ -473,20 +479,41 @@ const getWatchHistory = asyncHandler(async (req, res) => {
                                 $first: "$owner"
                             }
                         }
+                    },
+                    {
+                        $project: {
+                            owner: 1,
+                            views: 1,
+                            thumbnail: 1,
+                            "videoFile.hls": 1,
+                            "videoFile.mp4": 1,
+                            title: 1,
+                        }
                     }
                 ]
             }
+        },
+        {
+            $addFields: {
+                video: {
+                    $first: "$video"
+                }
+            }
+        },
+        {
+            $addFields: {
+                "video.watchedAt": "$watchHistory.watchedAt",
+            }
+        },
+        {
+            $replaceRoot: {
+                newRoot: "$video"
+            }
         }
     ])
-
-    console.log(user[0].watchHistory);
-    console.log(Array.isArray(user[0].watchHistory));
-
-    if (!user?.[0]?.watchHistory?.length) throw new ApiError(404, "No watch history found");
-
     return res
         .status(200)
-        .json(new ApiResponse(200, "Watch History fetched successfully", user[0].watchHistory))
+        .json(new ApiResponse(200, "Watch History fetched successfully", watchHistory))
 
 })
 

@@ -191,6 +191,26 @@ const watchVideo = asyncHandler(async (req, res) => {
         }
     })
 
+    const userId = req.user?._id;
+    if(userId){
+        await User.findByIdAndUpdate(userId, {
+            $pull: {
+                watchHistory: {
+                    video: videoId
+                }
+            }
+        });
+
+        await User.findByIdAndUpdate(userId, {
+            $push: {
+                watchHistory: {
+                    video: videoId,
+                    watchedAt: new Date(),
+                }
+            }
+        })
+    }
+
     return res
     .status(200)
     .json( new ApiResponse(200, "Video fetched successfully", videoObj));
