@@ -82,25 +82,118 @@ const watchVideo = asyncHandler(async (req, res) => {
     const { videoId } = req.params
     if(!videoId) throw new ApiError(404, "Invalid video id");
 
-    const videoMetadata = await Video.findById(videoId)
-    .select("-videoFile.public_id")
-    .populate({
-        path: "owner",
-        select: "username fullName subscribersCount avatar.url"
+    const [videoObj] = await Video.aggregate([
+        {
+            $match: {
+                _id: new mongoose.Types.ObjectId(videoId),
+            }
+        },
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                    {
+                        $project: {
+                            username: 1,
+                            fullName: 1,
+                            "avatar.url": 1,
+                            subscribersCount: 1,
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $unwind: "$owner"
+        },
+        {
+            $lookup: {
+                from: "comments",
+                localField: "_id",
+                foreignField: "targetId",
+                as: "topComment",
+                pipeline: [
+                    {
+                        $sort: {
+                            "likes": -1,
+                        }
+                    },
+                    {
+                        $limit: 1
+                    },
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "author",
+                            foreignField: "_id",
+                            as: "author",
+                            pipeline: [{
+                                $project: {
+                                    username: 1,
+                                    fullName: 1,
+                                    "avatar.url": 1,
+                                }
+                            },
+                        ]
+                        }
+                    },
+                    {
+                        $addFields: {
+                            author: {
+                                $first: "$author"
+                            }
+                        }
+                    },
+                    {
+                        $project: {
+                            text: 1,
+                            author: 1,
+                            createdAt: 1,
+                            updatedAt: 1
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $addFields: {
+                topComment: {
+                    $first: "$topComment"
+                }
+            }
+        },
+        {
+            $project: {
+                title: 1,
+                description: 1,
+                thumbnail: 1,
+                views: 1,
+                likes: 1,
+                comments: 1,
+                topComment: 1,
+                duration: 1,
+                owner: 1,
+                "videoFile.mp4": 1,
+                "videoFile.hls": 1,
+                format: 1,
+            }
+        }
+    ])
+
+
+    //increment video views, will return the old views status
+    await Video.findByIdAndUpdate(videoId, {
+        $inc: {
+            "views": 1
+        }
     })
-    if(!videoMetadata) throw new ApiError(404, "No such video exists");
-    console.log(videoMetadata);
 
     return res
     .status(200)
-    .json(new ApiResponse(200, "Video fetched successfully", videoMetadata))
-
-
-
-    // increase the views once clicked
-    // add it to user watchhistory
-    // like the video
-    // comment on the video
+    .json( new ApiResponse(200, "Video fetched successfully", videoObj));
 })
 
 const getChannelVideos = asyncHandler(async (req, res) => {
