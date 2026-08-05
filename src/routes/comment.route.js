@@ -3,9 +3,9 @@ import { verifyJWT } from '../middlewares/auth.middlewares.js';
 
 const router = Router();
 
-import { doComment, deleteComment } from '../controllers/comment.controller.js';
-import { upload } from '../middlewares/multer.middlewares.js';
+import {deleteComment, toggleComentLike } from '../controllers/comment.controller.js';
 
-router.route("/delete/:commentId").post(verifyJWT, deleteComment);
+router.route("/:commentId/like").patch(verifyJWT, toggleComentLike)
+router.route("/:commentId/delete").delete(verifyJWT, deleteComment);
 
 export default router; 

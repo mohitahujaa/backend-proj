@@ -1,4 +1,5 @@
 import { Comment } from "../models/comment.model.js";
+import { Like } from "../models/like.model.js";
 import { Video } from "../models/video.models.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -164,6 +165,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
                 _id: 1,
                 text: 1,
                 author: 1,
+                likes: 1,
                 createdAt: 1,
                 updatedAt: 1
             }
@@ -176,4 +178,91 @@ const getVideoComments = asyncHandler(async (req, res) => {
     
 })
 
-export { doComment, deleteComment, getVideoComments };
+const toggleComentLike = asyncHandler(async (req, res) => {
+    const { commentId } = req.params;
+    if(!(mongoose.Types.ObjectId.isValid(commentId)))throw new ApiError(404, "No such comment exists");
+
+    const commentExists = await Comment.findById(commentId).select("_id").lean();
+    if(!commentExists) throw new ApiError(404, "No such comment exists");
+
+    const userId = req.user?._id;
+
+    const isLiked = await Like.findOne({likedBy: userId, targetId: commentId, targetType: "Comment"}).select("_id").lean();
+    
+    const session = await mongoose.startSession();
+    try {
+        session.startTransaction();
+        
+        if(!isLiked){
+            const [response] = await Like.create([
+                    {
+                    likedBy: userId,
+                    targetId: commentId,
+                    targetType: "Comment"
+                    }
+                ],
+                {session}
+            );
+            if(!response) throw new ApiError(500, "Unable to like this comment right now")
+
+            const incCommentLikes = await Comment.findByIdAndUpdate(response.targetId, 
+                {
+                    $inc: {
+                        likes: 1
+                    }
+                },
+                {
+                    new: true,
+                    session
+                }
+            )
+            if(!incCommentLikes) throw new ApiError(500, "Unable to like the comment at the moment")
+
+            await session.commitTransaction();
+
+            return res
+            .status(200)
+            .json( new ApiResponse(200, "Comment liked", {
+                isLiked : true,
+                likeCount: incCommentLikes.likes,
+            }))
+
+        }else{
+            
+            const isDeleted = await Like.findByIdAndDelete(isLiked._id, { session });
+            if(!isDeleted) throw new ApiError(500, "Unable to find the liked document");
+
+            const decCommentLikes = await Comment.findByIdAndUpdate(commentId, 
+                {
+                    $inc: {
+                        likes: -1
+                    }
+                },
+                {
+                    new: true,
+                    session
+                }
+            );
+            
+            if(!decCommentLikes) throw new ApiError(500, "Unable to unlike this comment at the moment");
+
+            await session.commitTransaction();
+
+            return res
+            .status(200)
+            .json( new ApiResponse(200, "Comment unliked", {
+                isLiked : false,
+                likeCount: decCommentLikes.likes,
+            }));
+            
+        }
+    } catch (error) {
+        await session.abortTransaction();
+        throw new ApiError(500, error.message || "Unable to toggle Like functionality");
+    } finally{
+        await session.endSession()
+    }
+    
+})
+
+export { doComment, toggleComentLike, deleteComment, getVideoComments };

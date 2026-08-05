@@ -21,6 +21,10 @@ const commentSchema = new Schema(
             type: String,
             enum: ["Video"],
             required: true
+        },
+        likes: {
+            type: Number,
+            default: 0,
         }
     },
     {
