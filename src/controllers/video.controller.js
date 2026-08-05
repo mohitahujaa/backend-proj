@@ -4,6 +4,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 import { deleteCloudinaryFile, uploadOnCloudinary } from "../utils/cloudinary.js";
 import { Video } from "../models/video.models.js";
 import { User } from "../models/user.models.js";
+import { Subscription } from "../models/subscription.models.js";
 import mongoose from "mongoose";
 
 const uploadVideo = asyncHandler( async (req, res) => {
@@ -344,4 +345,178 @@ const searchVideos = asyncHandler(async (req, res) => {
     .json( new ApiResponse(200, "Search query executed", videos));
 })
 
-export { uploadVideo, deleteVideo, watchVideo, getChannelVideos, searchVideos }
+const homePage = asyncHandler(async (req, res) => {
+    const userId = req.user?._id;
+
+    //get subscribed channels list
+    if(userId){
+        const subscriptions = await Subscription.find({
+            subscriber: userId
+        });
+
+        const subscribedChannelsId = subscriptions.map(s => s.channel);
+
+        const subscribedChannelsLatestVideos = await Video.aggregate([
+            {
+                $match: {
+                    owner: {
+                        $in: subscribedChannelsId,
+                    }
+                }
+            },
+            {
+                $sort: {
+                    createdAt: -1,
+                }
+            },
+            {
+                $limit: 20
+            },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "owner",
+                    foreignField: "_id",
+                    as: "owner",
+                    pipeline: [{
+                        $project: {
+                            username: 1,
+                            "avatar.url": 1,
+                            fullName: 1,
+                        }
+                    }]
+                }
+            },
+            {
+                $addFields: {
+                    owner: {
+                        $first: "$owner",
+                    }
+                }
+            },
+            {
+                $project: {
+                    thumbnail: 1,
+                    "videoFile.mp4": 1,
+                    "videoFile.hls": 1,   
+                    title: 1,
+                    views: 1,
+                    owner: 1,
+                }
+            }
+        ])
+
+        const randomVideos = await Video.aggregate([
+            {
+                $match: {
+                    owner: {
+                        $nin: subscribedChannelsId,
+                    }
+                }
+            },
+            {
+                $sample: {
+                    size: 10,
+                }
+            },
+            // {
+            //     $sort: {
+            //         views: -1,
+            //     }
+            // },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "owner",
+                    foreignField: "_id",
+                    as: "owner",
+                    pipeline: [{
+                        $project: {
+                            username: 1,
+                            "avatar.url": 1,
+                            fullName: 1,
+                        }
+                    }]
+                }
+            },
+            {
+                $addFields: {
+                    owner: {
+                        $first: "$owner",
+                    }
+                }
+            },
+            {
+                $project: {
+                    thumbnail: 1,
+                    "videoFile.mp4": 1,
+                    "videoFile.hls": 1,   
+                    title: 1,
+                    views: 1,
+                    owner: 1,
+                }
+            }
+        ])
+
+        let feed= [];
+
+        while(subscribedChannelsLatestVideos.length || randomVideos.length){
+            if(subscribedChannelsLatestVideos.length){
+                feed.push(subscribedChannelsLatestVideos.shift());
+            }
+
+            if(randomVideos.length){
+                feed.push(randomVideos.shift());
+            }
+        }
+        
+        return res
+        .status(200)
+        .json(new ApiResponse(200, "Feed updated", {videos: feed}) )
+
+    } else{
+        const feed = await Video.aggregate([
+            {
+                $sample: {
+                    size: 20,
+                }
+            },
+            // {
+            //     $sort: {
+            //         views: -1
+            //     }
+            // },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "owner",
+                    foreignField: "_id",
+                    as: "owner",
+                    pipeline: [{
+                        $project: {
+                            username: 1,
+                            "avatar.url": 1,
+                            fullName: 1,
+                        }
+                    }]
+                }
+            },
+            {
+                $project: {
+                    thumbnail: 1,
+                    "videoFile.mp4": 1,
+                    "videoFile.hls": 1,   
+                    title: 1,
+                    views: 1,
+                    owner: 1,
+                }
+            }
+        ])
+
+        return res
+        .status(200)
+        .json(new ApiResponse(200, "Feed updated", {videos: feed}))
+    }
+})
+
+export { uploadVideo, deleteVideo, watchVideo, getChannelVideos, searchVideos, homePage }
