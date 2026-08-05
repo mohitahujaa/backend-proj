@@ -6,6 +6,7 @@ import { Video } from "../models/video.models.js";
 import { User } from "../models/user.models.js";
 import { Subscription } from "../models/subscription.models.js";
 import mongoose from "mongoose";
+import { Like } from "../models/like.model.js";
 
 const uploadVideo = asyncHandler( async (req, res) => {
     const { title, description } = req.body;
@@ -53,30 +54,79 @@ const uploadVideo = asyncHandler( async (req, res) => {
 })
 
 const deleteVideo = asyncHandler(async (req, res) => {
+    const session = await mongoose.startSession();
+
+    try {
+        session.startTransaction();
+
+        const { videoId } = req.params;
+        if(!videoId) throw new ApiError(404, "video not selected");
     
-    const { videoId } = req.params;
-    if(!videoId) throw new ApiError(404, "video not selected");
-
-    const video = await Video.findById(videoId);
-    if(!video) throw new ApiError(404, "Video doesn't exist");
-
-    const public_id = video?.videoFile?.public_id;
-
-    if(!video.owner.equals(req.user?._id)) throw new ApiError(400, "Bad request!, You are not authorised");
-
-    const vidDeleted = await deleteCloudinaryFile(public_id, { resType: "video" });
-    console.log(vidDeleted);
+        const video = await Video.findById(videoId).session(session);
+        if(!video) throw new ApiError(404, "Video doesn't exist");
     
-    const status = vidDeleted?.deleted?.[public_id];
-    console.log(status);
-    if(status !== "deleted" && status !== "not_found") throw new ApiError(500, "unable to delete the file from cloudinary");
+        const public_id = video?.videoFile?.public_id;
+    
+        if(!video.owner.equals(req.user?._id)) throw new ApiError(403, "Bad request!, You are not authorised");
+    
+        const vidDeleted = await deleteCloudinaryFile(public_id, { resType: "video" });
+        console.log(vidDeleted);
+        
+        const status = vidDeleted?.deleted?.[public_id];
+        console.log(status);
+        if(status !== "deleted" && status !== "not_found") throw new ApiError(500, "unable to delete the file from cloudinary");
+    
+        await Like.deleteMany({
+                targetId: videoId,
+                targetType: "Video",
+            },
+            {
+                session
+            }
+        );
+    
+        const comments = await Comment.find({
+            targetId: videoId,
+            targetType: "Video",
+        }).session(session).select("_id").lean();
+    
+        const commentIds = comments.map(comment => comment._id);
+    
+        await Like.deleteMany({
+                targetId: {
+                    $in: commentIds
+                },
+                targetType: "Comment",
+            },
+            {
+                session
+            }
+        );
+    
+        await Comment.deleteMany({
+                _id: {
+                    $in: commentIds
+                }
+            },
+            {
+                session
+            }
+        );
+    
+        const dataDeleted = await Video.findByIdAndDelete(video._id, { session });
+        if(!dataDeleted) throw new ApiError(500, "Unable to delete the video");
 
-    const dataDeleted = await Video.findByIdAndDelete(video._id);
-    if(!dataDeleted) throw new ApiError(500, "Unable to delete the video");
+        await session.commitTransaction(); 
 
-    return res
-    .status(200)
-    .json( new ApiResponse(200, "Video deleted successfully"));
+        return res
+        .status(200)
+        .json( new ApiResponse(200, "Video deleted successfully"));
+    } catch (error) {
+        await session.abortTransaction();
+        throw new ApiError(error.statusCode || 500, error.message || "Unable to delete this video")
+    } finally{
+        await session.endSession();
+    }
 })
 
 const watchVideo = asyncHandler(async (req, res) => {
@@ -469,7 +519,7 @@ const homePage = asyncHandler(async (req, res) => {
                 feed.push(randomVideos.shift());
             }
         }
-        
+
         return res
         .status(200)
         .json(new ApiResponse(200, "Feed updated", {videos: feed}) )
