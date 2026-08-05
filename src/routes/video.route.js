@@ -5,7 +5,7 @@ import { upload } from '../middlewares/multer.middlewares.js';
 
 
 
-import { uploadVideo, deleteVideo, watchVideo } from '../controllers/video.controller.js';
+import { uploadVideo, deleteVideo, watchVideo, searchVideos } from '../controllers/video.controller.js';
 import { toggleVideoLike } from '../controllers/like.controller.js';
 import { doComment, getVideoComments } from '../controllers/comment.controller.js';
 
@@ -17,5 +17,7 @@ router.route("/:videoId/like").post(verifyJWT, toggleVideoLike);
 
 router.route("/:videoId/comment").post(verifyJWT, upload.none(), doComment);
 router.route("/:videoId/comments").get(verifyJWT, getVideoComments);
+
+router.route("/search").get(verifyJWT, searchVideos)
 
 export default router;

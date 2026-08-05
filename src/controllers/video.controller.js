@@ -259,4 +259,89 @@ const getChannelVideos = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, "Videos fetched Successfully", videos));
 })
 
-export { uploadVideo, deleteVideo, watchVideo, getChannelVideos }
+const searchVideos = asyncHandler(async (req, res) => {
+    
+    const { q } = req.query;
+    if(!q?.trim()) throw new ApiError(400, "Search query is required");
+
+    const videos = await Video.aggregate([
+        {
+            $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                    {
+                        $project: {
+                            username: 1,
+                            fullName: 1,
+                            "avatar.url": 1,
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $addFields: {
+                owner: {
+                    $first: "$owner",
+                }
+            }
+        },
+        {
+            $match: {
+                $or: [
+                    {
+                        title: {
+                            $regex: q,
+                            $options: "i",
+                        }
+                    },
+                    {
+                        description: {
+                            $regex: q,
+                            $options: "i",
+                        }
+                    },
+                    {
+                        "owner.fullName": {
+                            $regex: q,
+                            $options: "i",
+                        }
+                    },
+                    {
+                        "owner.username": {
+                            $regex: q,
+                            $options: "i",
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            $sort: {
+                views: -1,
+            }
+        },
+        {
+            $project: {
+                thumbnail: 1,
+                title: 1,
+                owner: 1,
+                views: 1,
+                likes: 1,
+                comments: 1,
+                "videoFile.mp4": 1,
+                "videoFile.hls": 1,
+                createdAt: 1,
+            }
+        }
+    ])
+
+    return res
+    .status(200)
+    .json( new ApiResponse(200, "Search query executed", videos));
+})
+
+export { uploadVideo, deleteVideo, watchVideo, getChannelVideos, searchVideos }
