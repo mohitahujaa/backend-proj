@@ -112,9 +112,13 @@ const toggleSubscribe = asyncHandler( async (req, res) => {
 )
 
 const getSubscribedChannels = asyncHandler( async (req, res) => {
+
+    const page = req.query.page;
+    const limit = req.query.limit;
+    
     const userId = req.user?._id;
 
-    const subscribedChannels = await Subscription.aggregate([
+    const aggregate = Subscription.aggregate([
         {
             $match: {
                 subscriber: new mongoose.Types.ObjectId(userId)
@@ -157,6 +161,11 @@ const getSubscribedChannels = asyncHandler( async (req, res) => {
             }
         }
     ])
+
+    const subscribedChannels = await Subscription.aggregatePaginate(aggregate, {
+        page,
+        limit
+    });
 
     return res
     .status(200)

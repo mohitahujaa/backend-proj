@@ -149,18 +149,13 @@ const toggleComentLike = asyncHandler(async (req, res) => {
 })
 
 const getLikedVideos = asyncHandler(async (req, res) => {
+
+    const page = req.query.page;
+    const limit = req.query.limit;
+
     const userId = req.user?._id;
 
-    // const likedVidoes = await Like.find({likedBy: userId, targetType: "Video"}).populate({
-    //     path: "targetId",
-    //     select: "title thumbnail owner views likes coments duration videoFile.mp4",
-    //     populate: {
-    //         path: "owner",
-    //         select: "username avatar.url createdAt"
-    //     }
-    // });
-
-    const likedVidoes = await Like.aggregate([
+    const aggregate = Like.aggregate([
         {
             $match: {
                 likedBy: new mongoose.Types.ObjectId(userId),
@@ -226,6 +221,11 @@ const getLikedVideos = asyncHandler(async (req, res) => {
             }
         }
     ])
+
+    const likedVidoes = await Like.aggregatePaginate(aggregate, {
+        page,
+        limit
+    });
 
     return res
         .status(200)

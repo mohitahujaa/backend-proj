@@ -222,6 +222,9 @@ const watchVideo = asyncHandler(async (req, res) => {
 })
 
 const getChannelVideos = asyncHandler(async (req, res) => {
+    const page = req.query.page;
+    const limit = req.query.limit;
+
     const { channelUsername } = req.params;
     if (!channelUsername) throw new ApiError(404, "Enter valid channel name");
 
@@ -230,7 +233,7 @@ const getChannelVideos = asyncHandler(async (req, res) => {
     if (!channelObj) throw new ApiError(404, "Enter a valid channel name");
     console.log(channelObj);
 
-    const videos = await Video.aggregate([
+    const aggregate =  Video.aggregate([
         {
             $match: {
                 owner: new mongoose.Types.ObjectId(channelObj._id)
@@ -258,18 +261,24 @@ const getChannelVideos = asyncHandler(async (req, res) => {
         }
     ])
 
-    console.log(videos);
+    const videos = await Video.aggregatePaginate(aggregate,{
+        page,
+        limit
+    }
+    )
     return res
         .status(200)
         .json(new ApiResponse(200, "Videos fetched Successfully", videos));
 })
 
 const searchVideos = asyncHandler(async (req, res) => {
+    const page = req.query.page;
+    const limit = req.query.limit;
 
     const { q } = req.query;
     if (!q?.trim()) throw new ApiError(400, "Search query is required");
 
-    const videos = await Video.aggregate([
+    const aggregate = Video.aggregate([
         {
             $lookup: {
                 from: "users",
@@ -343,6 +352,11 @@ const searchVideos = asyncHandler(async (req, res) => {
             }
         }
     ])
+
+    const videos = await Video.aggregatePaginate(aggregate, {
+        page,
+        limit
+    });
 
     return res
         .status(200)

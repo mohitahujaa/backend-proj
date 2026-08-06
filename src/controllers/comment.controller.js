@@ -95,6 +95,9 @@ const deleteComment = asyncHandler(async (req, res) => {
 
 const getVideoComments = asyncHandler(async (req, res) => {
 
+    const page = req.query.page;
+    const limit = req.query.limit;
+
     const { videoId } = req.params;
     if (!videoId) throw new ApiError(404, "Invalid video url");
     if (!mongoose.Types.ObjectId.isValid(videoId)) throw new ApiError(404, "Invalid video url");
@@ -103,7 +106,7 @@ const getVideoComments = asyncHandler(async (req, res) => {
     const videoExists = Video.findById(videoId).select("_id").lean();
     if (!videoExists) return new ApiError(404, "Video not found");
 
-    const comments = await Comment.aggregate([
+    const aggregate = Comment.aggregate([
         {
             $match: {
                 targetId: new mongoose.Types.ObjectId(videoId),
@@ -145,6 +148,11 @@ const getVideoComments = asyncHandler(async (req, res) => {
             }
         }
     ])
+
+    const comments = await Comment.aggregatePaginate(aggregate, {
+        page,
+        limit
+    });
 
     return res
         .status(200)

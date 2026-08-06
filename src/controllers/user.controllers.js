@@ -435,10 +435,14 @@ const getPublicChannelPage = asyncHandler(async (req, res) => {
 })
 
 const getWatchHistory = asyncHandler(async (req, res) => {
+
+    const page = req.query.page;
+    const limit = req.query.limit;
+
     const userId = req.user?._id;
     if (!userId) throw new ApiError(400, "Please login again to continue with your request");
 
-    const watchHistory = await User.aggregate([
+    const aggregate = User.aggregate([
         {
             $match: {
                 _id: userId
@@ -514,6 +518,12 @@ const getWatchHistory = asyncHandler(async (req, res) => {
             }
         }
     ])
+
+    const watchHistory = await User.aggregatePaginate(aggregate, {
+        page,
+        limit
+    })
+
     return res
         .status(200)
         .json(new ApiResponse(200, "Watch History fetched successfully", watchHistory))

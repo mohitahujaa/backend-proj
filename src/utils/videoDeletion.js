@@ -1,6 +1,6 @@
-import { Like } from "../models/like.model";
-import { Video } from "../models/video.models";
-import { Comment } from "../models/comment.model";
+import { Like } from "../models/like.model.js";
+import { Video } from "../models/video.models.js";
+import { Comment } from "../models/comment.model.js";
 
 const deleteVideoById = async (videoId, userId, session) => {
 
