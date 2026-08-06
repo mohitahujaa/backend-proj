@@ -6,51 +6,51 @@ import { Video } from "../models/video.models.js";
 import { User } from "../models/user.models.js";
 import { Subscription } from "../models/subscription.models.js";
 import mongoose from "mongoose";
-import { Like } from "../models/like.model.js";
+import { deleteVideoById } from "../utils/videoDeletion.js";
 
-const uploadVideo = asyncHandler( async (req, res) => {
+const uploadVideo = asyncHandler(async (req, res) => {
     const { title, description } = req.body;
     const localFilePath = req.file?.path;
-    if(!localFilePath) throw new ApiError(400, "No file specified");
+    if (!localFilePath) throw new ApiError(400, "No file specified");
 
-    if(!title.trim() || !description.trim()) throw new ApiError(400, "Title and Description are required");
+    if (!title.trim() || !description.trim()) throw new ApiError(400, "Title and Description are required");
     console.log(req.file);
 
-    const response = await uploadOnCloudinary(localFilePath, { resType: "video", folder: "videos"});
+    const response = await uploadOnCloudinary(localFilePath, { resType: "video", folder: "videos" });
     console.log(response);
-    if(!response) throw new ApiError(500, "Cloudinary video upload failed");
+    if (!response) throw new ApiError(500, "Cloudinary video upload failed");
 
     //save to db
     let video;
- try {
-       video = await Video.create({
-           videoFile: {
-               mp4: response.secure_url,
-               hls: response.playback_url,
-               public_id: response.public_id,
-           },
-           title,
-           description,
-           duration: response.duration,
-           bytes: response.bytes,
-           format: response.format,
-           resolution: {
-            width: response.width,
-            height: response.height
-           },
-           owner: req.user?._id,
-       })
+    try {
+        video = await Video.create({
+            videoFile: {
+                mp4: response.secure_url,
+                hls: response.playback_url,
+                public_id: response.public_id,
+            },
+            title,
+            description,
+            duration: response.duration,
+            bytes: response.bytes,
+            format: response.format,
+            resolution: {
+                width: response.width,
+                height: response.height
+            },
+            owner: req.user?._id,
+        })
 
- } catch (error) {
-    console.log(error);
-    await deleteCloudinaryFile(response.public_id);
+    } catch (error) {
+        console.log(error);
+        await deleteCloudinaryFile(response.public_id);
 
-    throw new ApiError(500, "Unable to upload video");
- }
+        throw new ApiError(500, "Unable to upload video");
+    }
 
     return res
-    .status(201)
-    .json( new ApiResponse(201, "Video uploaded successfully", video))
+        .status(201)
+        .json(new ApiResponse(201, "Video uploaded successfully", video))
 })
 
 const deleteVideo = asyncHandler(async (req, res) => {
@@ -60,78 +60,32 @@ const deleteVideo = asyncHandler(async (req, res) => {
         session.startTransaction();
 
         const { videoId } = req.params;
-        if(!videoId) throw new ApiError(404, "video not selected");
-    
-        const video = await Video.findById(videoId).session(session);
-        if(!video) throw new ApiError(404, "Video doesn't exist");
-    
-        const public_id = video?.videoFile?.public_id;
-    
-        if(!video.owner.equals(req.user?._id)) throw new ApiError(403, "Bad request!, You are not authorised");
-    
-        const vidDeleted = await deleteCloudinaryFile(public_id, { resType: "video" });
-        console.log(vidDeleted);
-        
-        const status = vidDeleted?.deleted?.[public_id];
-        console.log(status);
-        if(status !== "deleted" && status !== "not_found") throw new ApiError(500, "unable to delete the file from cloudinary");
-    
-        await Like.deleteMany({
-                targetId: videoId,
-                targetType: "Video",
-            },
-            {
-                session
-            }
-        );
-    
-        const comments = await Comment.find({
-            targetId: videoId,
-            targetType: "Video",
-        }).session(session).select("_id").lean();
-    
-        const commentIds = comments.map(comment => comment._id);
-    
-        await Like.deleteMany({
-                targetId: {
-                    $in: commentIds
-                },
-                targetType: "Comment",
-            },
-            {
-                session
-            }
-        );
-    
-        await Comment.deleteMany({
-                _id: {
-                    $in: commentIds
-                }
-            },
-            {
-                session
-            }
-        );
-    
-        const dataDeleted = await Video.findByIdAndDelete(video._id, { session });
-        if(!dataDeleted) throw new ApiError(500, "Unable to delete the video");
+        if (!videoId) throw new ApiError(404, "video not selected");
 
-        await session.commitTransaction(); 
+        const public_id = await deleteVideoById(videoId, req.user?._id, session);
+        await session.commitTransaction();
+
+        const vidDeleted = await deleteCloudinaryFile(public_id, { resType: "video" });
+
+        const status = vidDeleted?.deleted?.[public_id];
+        if (status !== "deleted" && status !== "not_found") console.log("unable to delete the file from cloudinary");
 
         return res
-        .status(200)
-        .json( new ApiResponse(200, "Video deleted successfully"));
+            .status(200)
+            .json(new ApiResponse(200, "Video deleted successfully", { success: true }));
+
     } catch (error) {
         await session.abortTransaction();
         throw new ApiError(error.statusCode || 500, error.message || "Unable to delete this video")
-    } finally{
+
+    } finally {
         await session.endSession();
     }
 })
 
 const watchVideo = asyncHandler(async (req, res) => {
     const { videoId } = req.params
-    if(!videoId) throw new ApiError(404, "Invalid video id");
+    if (!videoId) throw new ApiError(404, "Invalid video id");
 
     const [videoObj] = await Video.aggregate([
         {
@@ -188,7 +142,7 @@ const watchVideo = asyncHandler(async (req, res) => {
                                     "avatar.url": 1,
                                 }
                             },
-                        ]
+                            ]
                         }
                     },
                     {
@@ -243,7 +197,7 @@ const watchVideo = asyncHandler(async (req, res) => {
     })
 
     const userId = req.user?._id;
-    if(userId){
+    if (userId) {
         await User.findByIdAndUpdate(userId, {
             $pull: {
                 watchHistory: {
@@ -263,19 +217,19 @@ const watchVideo = asyncHandler(async (req, res) => {
     }
 
     return res
-    .status(200)
-    .json( new ApiResponse(200, "Video fetched successfully", videoObj));
+        .status(200)
+        .json(new ApiResponse(200, "Video fetched successfully", videoObj));
 })
 
 const getChannelVideos = asyncHandler(async (req, res) => {
     const { channelUsername } = req.params;
-    if(!channelUsername) throw new ApiError(404, "Enter valid channel name");
+    if (!channelUsername) throw new ApiError(404, "Enter valid channel name");
 
     //check if channel exists (username is correct)
-    const channelObj = await User.findOne({username: channelUsername}).select("_id").lean();
-    if(!channelObj) throw new ApiError(404, "Enter a valid channel name");
+    const channelObj = await User.findOne({ username: channelUsername }).select("_id").lean();
+    if (!channelObj) throw new ApiError(404, "Enter a valid channel name");
     console.log(channelObj);
-    
+
     const videos = await Video.aggregate([
         {
             $match: {
@@ -298,22 +252,22 @@ const getChannelVideos = asyncHandler(async (req, res) => {
                 likes: 1,
                 comments: 1,
                 createdAt: 1,
-                "videoFile.mp4" : 1,
-                "videoFile.hls" : 1,
+                "videoFile.mp4": 1,
+                "videoFile.hls": 1,
             }
         }
     ])
 
     console.log(videos);
     return res
-    .status(200)
-    .json(new ApiResponse(200, "Videos fetched Successfully", videos));
+        .status(200)
+        .json(new ApiResponse(200, "Videos fetched Successfully", videos));
 })
 
 const searchVideos = asyncHandler(async (req, res) => {
-    
+
     const { q } = req.query;
-    if(!q?.trim()) throw new ApiError(400, "Search query is required");
+    if (!q?.trim()) throw new ApiError(400, "Search query is required");
 
     const videos = await Video.aggregate([
         {
@@ -391,15 +345,15 @@ const searchVideos = asyncHandler(async (req, res) => {
     ])
 
     return res
-    .status(200)
-    .json( new ApiResponse(200, "Search query executed", videos));
+        .status(200)
+        .json(new ApiResponse(200, "Search query executed", videos));
 })
 
 const homePage = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
 
     //get subscribed channels list
-    if(userId){
+    if (userId) {
         const subscriptions = await Subscription.find({
             subscriber: userId
         });
@@ -448,7 +402,7 @@ const homePage = asyncHandler(async (req, res) => {
                 $project: {
                     thumbnail: 1,
                     "videoFile.mp4": 1,
-                    "videoFile.hls": 1,   
+                    "videoFile.hls": 1,
                     title: 1,
                     views: 1,
                     owner: 1,
@@ -500,7 +454,7 @@ const homePage = asyncHandler(async (req, res) => {
                 $project: {
                     thumbnail: 1,
                     "videoFile.mp4": 1,
-                    "videoFile.hls": 1,   
+                    "videoFile.hls": 1,
                     title: 1,
                     views: 1,
                     owner: 1,
@@ -508,23 +462,23 @@ const homePage = asyncHandler(async (req, res) => {
             }
         ])
 
-        let feed= [];
+        let feed = [];
 
-        while(subscribedChannelsLatestVideos.length || randomVideos.length){
-            if(subscribedChannelsLatestVideos.length){
+        while (subscribedChannelsLatestVideos.length || randomVideos.length) {
+            if (subscribedChannelsLatestVideos.length) {
                 feed.push(subscribedChannelsLatestVideos.shift());
             }
 
-            if(randomVideos.length){
+            if (randomVideos.length) {
                 feed.push(randomVideos.shift());
             }
         }
 
         return res
-        .status(200)
-        .json(new ApiResponse(200, "Feed updated", {videos: feed}) )
+            .status(200)
+            .json(new ApiResponse(200, "Feed updated", { videos: feed }))
 
-    } else{
+    } else {
         const feed = await Video.aggregate([
             {
                 $sample: {
@@ -555,7 +509,7 @@ const homePage = asyncHandler(async (req, res) => {
                 $project: {
                     thumbnail: 1,
                     "videoFile.mp4": 1,
-                    "videoFile.hls": 1,   
+                    "videoFile.hls": 1,
                     title: 1,
                     views: 1,
                     owner: 1,
@@ -564,8 +518,8 @@ const homePage = asyncHandler(async (req, res) => {
         ])
 
         return res
-        .status(200)
-        .json(new ApiResponse(200, "Feed updated", {videos: feed}))
+            .status(200)
+            .json(new ApiResponse(200, "Feed updated", { videos: feed }))
     }
 })
 

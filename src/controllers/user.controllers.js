@@ -6,6 +6,9 @@ import { Subscription } from '../models/subscription.models.js';
 import { uploadOnCloudinary, deleteCloudinaryFile } from '../utils/cloudinary.js';
 import jwt from "jsonwebtoken";
 import mongoose from 'mongoose';
+import { deleteCommentById, deleteCommentLike, deleteVideoById, deleteVideoLike } from '../utils/videoDeletion.js';
+import { Video } from '../models/video.models.js';
+import { Like } from '../models/like.model.js';
 
 const options = {
     httpOnly: true,
@@ -71,8 +74,8 @@ const registerUser = asyncHandler(async (req, res) => {
     if (!avatarLocalPath) throw new ApiError(400, "Avatar is required");
 
     //step 6 : uploading on cloudinary
-    const avatar = await uploadOnCloudinary(avatarLocalPath, {resType : "image", folder : "avatars"});
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath, {resType : "image", folder : "coverImages"});
+    const avatar = await uploadOnCloudinary(avatarLocalPath, { resType: "image", folder: "avatars" });
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath, { resType: "image", folder: "coverImages" });
 
     if (!avatar) {
         throw new ApiError(400, "Avatar is required");
@@ -292,7 +295,7 @@ const updateAvatarImage = asyncHandler(async (req, res) => {
     if (!AvatarImageLocalPath) throw new ApiError(404, "Avatar file is required");
 
     //upload it on cloudinary
-    const avatar = await uploadOnCloudinary(AvatarImageLocalPath, {resType : "image", folder : "avatars"});
+    const avatar = await uploadOnCloudinary(AvatarImageLocalPath, { resType: "image", folder: "avatars" });
     // console.log(avatar);
 
     if (!avatar?.url) throw new ApiError(500, "Something went wrong while updating Avatar");
@@ -332,7 +335,7 @@ const updateCoverImage = asyncHandler(async (req, res) => {
     if (!coverImageLocalPath) throw new ApiError(404, "Cover Image is required");
 
     //upload cover image on coudinary
-    const coverImage = await uploadOnCloudinary(coverImageLocalPath, {resType : "image", folder : "coverImages"});
+    const coverImage = await uploadOnCloudinary(coverImageLocalPath, { resType: "image", folder: "coverImages" });
     if (!coverImage.url) throw new ApiError(500, "Something went wrong while updating Cover Image");
 
     const user = await User.findByIdAndUpdate(req.user?._id,
@@ -366,8 +369,8 @@ const getPublicChannelPage = asyncHandler(async (req, res) => {
     const { username } = req.params;
     if (!username?.trim()) throw new ApiError(404, "No user specified");
 
-    const channel = await User.findOne({username}).select("-password -refreshToken -email");
-    if(!channel) throw new ApiError(404, "Channel does not exist");
+    const channel = await User.findOne({ username }).select("-password -refreshToken -email");
+    if (!channel) throw new ApiError(404, "Channel does not exist");
     // const channel = await User.aggregate([
     //     {
     //         $match: {
@@ -554,9 +557,11 @@ const deleteAccount = asyncHandler(async (req, res) => {
             }
         }))
 
-        await User.bulkWrite(TosubscribedOps, { session });
+        if (TosubscribedOps.length > 0) {
+            await User.bulkWrite(TosubscribedOps, { session });
+        }
 
-        const mySubscribers = await Subscription.find({ channel: req.user._id }).select('subscriber');
+        const mySubscribers = await Subscription.find({ channel: req.user._id }).select('subscriber').session(session);
 
         const mySubscribersOps = mySubscribers.map(sub => ({
             updateOne: {
@@ -565,13 +570,15 @@ const deleteAccount = asyncHandler(async (req, res) => {
                 },
                 update: {
                     $inc: {
-                        Tosubscribed: -1
+                        toSubscribedCount: -1
                     }
                 }
             }
         }))
 
-        await User.bulkWrite(mySubscribersOps, { session });
+        if (!mySubscribersOps.length > 0) {
+            await User.bulkWrite(mySubscribersOps, { session });
+        }
 
         console.log("Channels updated successfully");
 
@@ -585,17 +592,58 @@ const deleteAccount = asyncHandler(async (req, res) => {
             { session }
         )
 
-        const isUserDeleted = await User.findByIdAndDelete(user._id)
+
+        const videos = await Video.find({ owner: req.user?._id }).select("_id").session(session).lean();
+        let videoPublicIds = [];
+        for (const video of videos) {
+            videoPublicIds.push(await deleteVideoById(video._id, req.user?._id, session));
+        }
+
+        //delete likes on the video and comments liked by user
+        const videoLikeIds = await Like.find(
+            { likedBy: req.user?._id }
+        ).select("_id targetId targetType").session(session).lean();
+
+        for (const videoLikeId of videoLikeIds) {
+            if (videoLikeId.targetType === "Video") {
+                await deleteVideoLike(videoLikeId._id, videoLikeId.targetId, session)
+            }
+            else if (videoLikeId.targetType === "Comment") {
+                await deleteCommentLike(videoLikeId._id, videoLikeId.targetId, session);
+            }
+        }
+
+        //delete user comments
+        const commentIds = await Comment.find({
+            author: req.user?._id,
+            targetType: "Video",
+        }).select("_id").session(session).lean();
+
+        for (const commentId of commentIds) {
+            await deleteCommentById(commentId._id, req.user?._id, session);
+        }
+
+
+        const isUserDeleted = await User.findByIdAndDelete(user._id, { session });
         if (!isUserDeleted) throw new ApiError(500, "Some error occured while deleting the account");
 
         await session.commitTransaction();
 
+        for (const publicId of videoPublicIds) {
+            const vidDeleted = await deleteCloudinaryFile(publicId, { resType: "video" });
+
+            const status = vidDeleted?.deleted?.[publicId];
+            if (status !== "deleted" && status !== "not_found") console.log("unable to delete the file from cloudinary");
+        }
+
         await deleteCloudinaryFile(user.avatar.public_id);
-        if(user.coverImage?.public_id){
+        if (user.coverImage?.public_id) {
             await deleteCloudinaryFile(user.coverImage.public_id)
         }
 
         return res
+            .clearCookie("accessToken", options)
+            .clearCookie("refreshToken", options)
             .status(200)
             .json(new ApiResponse(200, "Account deletion Successful"));
 

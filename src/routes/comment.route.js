@@ -3,7 +3,8 @@ import { verifyJWT } from '../middlewares/auth.middlewares.js';
 
 const router = Router();
 
-import {deleteComment, toggleComentLike } from '../controllers/comment.controller.js';
+import { deleteComment } from '../controllers/comment.controller.js';
+import { toggleComentLike } from '../controllers/like.controller.js';
 
 router.route("/:commentId/like").patch(verifyJWT, toggleComentLike)
 router.route("/:commentId/delete").delete(verifyJWT, deleteComment);
